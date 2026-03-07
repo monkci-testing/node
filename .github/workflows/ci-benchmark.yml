@@ -1,0 +1,56 @@
+name: CI Benchmark
+
+on:
+  workflow_dispatch:
+
+env:
+  PYTHON_VERSION: '3.14'
+  FLAKY_TESTS: keep_retrying
+  CLANG_VERSION: '19'
+  CC: sccache clang-19
+  CXX: sccache clang++-19
+  SCCACHE_GHA_ENABLED: 'true'
+  RUSTC_VERSION: '1.82'
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-test:
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        runner:
+          - monkci-ubuntu-24.04-4-6000iops
+          - monkci-ubuntu-24.04-4-3600iops
+          - monkci-ubuntu-24.04-4-4000iops
+          - monkci-ubuntu-24.04-4-3900iops
+          - depot-ubuntu-24.04-4
+          - ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          path: node
+      - name: Install Clang ${{ env.CLANG_VERSION }}
+        uses: ./node/.github/actions/install-clang
+        with:
+          clang-version: ${{ env.CLANG_VERSION }}
+      - name: Install Rust ${{ env.RUSTC_VERSION }}
+        run: |
+          rustup override set "$RUSTC_VERSION"
+          rustup --version
+      - name: Set up Python ${{ env.PYTHON_VERSION }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          allow-prereleases: true
+      - name: Set up sccache
+        uses: Mozilla-Actions/sccache-action@v0.0.9
+        with:
+          version: v0.12.0
+      - name: Build
+        run: make -C node build-ci -j4 V=1 CONFIG_FLAGS="--error-on-warn --v8-enable-temporal-support"
+      - name: Test
+        run: make -C node run-ci -j4 V=1 TEST_CI_ARGS="-p actions --measure-flakiness 9"
