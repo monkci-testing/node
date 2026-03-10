@@ -5,7 +5,7 @@ on:
 
 jobs:
   benchmark:
-    runs-on: [self-hosted , monkci-ubuntu-2404-4-3600iops]
+    runs-on: [monkci-ubuntu-2404-4-3600iops]
 
     steps:
       - name: Checkout repository
