@@ -1,0 +1,67 @@
+name: High-Performance NVMe/RAM Disk Benchmark
+
+on:
+  workflow_dispatch:
+
+jobs:
+  benchmark:
+    runs-on: monkci-ubuntu-2404-4-3600iops
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install fio
+        run: sudo apt-get update && sudo apt-get install -y fio
+
+      - name: Measure IOPS (Random Read/Write)
+        run: |
+          echo "Running Deep Queue Random I/O Test..."
+          fio --name=rand_rw_test \
+              --ioengine=io_uring \
+              --direct=1 \
+              --rw=randrw \
+              --rwmixread=75 \
+              --bs=4k \
+              --iodepth=256 \
+              --numjobs=4 \
+              --group_reporting \
+              --size=2G \
+              --runtime=30 \
+              --time_based \
+              --filename=test_file.io
+          
+      - name: Measure Throughput (Sequential Read)
+        run: |
+          echo "Running Multi-threaded Sequential Read..."
+          fio --name=seq_read_test \
+              --ioengine=io_uring \
+              --direct=1 \
+              --rw=read \
+              --bs=1M \
+              --iodepth=128 \
+              --numjobs=4 \
+              --group_reporting \
+              --size=4G \
+              --runtime=30 \
+              --time_based \
+              --filename=test_file.io
+
+      - name: Measure Throughput (Sequential Write)
+        run: |
+          echo "Running Multi-threaded Sequential Write..."
+          fio --name=seq_write_test \
+              --ioengine=io_uring \
+              --direct=1 \
+              --rw=write \
+              --bs=1M \
+              --iodepth=128 \
+              --numjobs=4 \
+              --group_reporting \
+              --size=4G \
+              --runtime=30 \
+              --time_based \
+              --filename=test_file.io
+
+      - name: Cleanup Test Files
+        run: rm -f test_file.io
