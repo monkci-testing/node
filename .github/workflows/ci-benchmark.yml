@@ -33,24 +33,81 @@ jobs:
         with:
           persist-credentials: false
           path: node
+
+      - name: Install fio
+        run: sudo apt-get update && sudo apt-get install -y fio
+
+      - name: Start background disk monitor
+        run: |
+          # Create a 2G file for fio to operate on (preallocate to avoid setup noise)
+          fio --name=preallocate --rw=write --bs=1M --size=2G --filename=monitor.io --output=/dev/null
+          # Start background random read monitor (low iodepth=1 to observe, not saturate)
+          fio --name=bg_monitor \
+              --ioengine=io_uring \
+              --direct=1 \
+              --rw=randrw \
+              --rwmixread=70 \
+              --bs=4k \
+              --iodepth=4 \
+              --numjobs=1 \
+              --size=2G \
+              --runtime=10800 \
+              --time_based \
+              --filename=monitor.io \
+              --output=fio-results.json \
+              --output-format=json \
+              --log_avg_msec=10000 \
+              --write_iops_log=fio-iops \
+              --write_bw_log=fio-bw &
+          echo $! > fio.pid
+          echo "Disk monitor started (PID=$(cat fio.pid))"
+
       - name: Install Clang ${{ env.CLANG_VERSION }}
         uses: ./node/.github/actions/install-clang
         with:
           clang-version: ${{ env.CLANG_VERSION }}
+
       - name: Install Rust ${{ env.RUSTC_VERSION }}
         run: |
           rustup override set "$RUSTC_VERSION"
           rustup --version
+
       - name: Set up Python ${{ env.PYTHON_VERSION }}
         uses: actions/setup-python@v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
           allow-prereleases: true
+
       - name: Set up sccache
         uses: Mozilla-Actions/sccache-action@v0.0.9
         with:
           version: v0.12.0
+
       - name: Build
         run: make -C node build-ci -j4 V=1 CONFIG_FLAGS="--error-on-warn --v8-enable-temporal-support"
+
       - name: Test
         run: make -C node run-ci -j4 V=1 TEST_CI_ARGS="-p actions --measure-flakiness 9"
+
+      - name: Stop disk monitor and print results
+        if: always()
+        run: |
+          if [ -f fio.pid ]; then
+            kill $(cat fio.pid) 2>/dev/null || true
+            sleep 2
+          fi
+          if [ -f fio-results.json ]; then
+            echo "====== Disk Monitor Summary (during build+test) ======"
+            python3 - <<'PYEOF'
+          import json, sys
+          with open("fio-results.json") as f:
+              data = json.load(f)
+          job = data["jobs"][0]
+          read  = job["read"]
+          write = job["write"]
+          print(f"  READ  IOPS: {read['iops']:.0f}  |  BW: {read['bw_bytes']/1024/1024:.1f} MB/s  |  lat p99: {read['lat_ns']['percentile']['99.000000']/1000:.0f} µs")
+          print(f"  WRITE IOPS: {write['iops']:.0f}  |  BW: {write['bw_bytes']/1024/1024:.1f} MB/s  |  lat p99: {write['lat_ns']['percentile']['99.000000']/1000:.0f} µs")
+          PYEOF
+            echo "======================================================"
+          fi
+          rm -f monitor.io fio.pid fio-results.json fio-iops*.log fio-bw*.log
