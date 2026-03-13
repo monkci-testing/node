@@ -1,5 +1,4 @@
-name: CI Benchmark
-
+name: CI Benchmark (No Cache)
 on:
   workflow_dispatch:
 
@@ -7,9 +6,11 @@ env:
   PYTHON_VERSION: '3.14'
   FLAKY_TESTS: keep_retrying
   CLANG_VERSION: '19'
-  CC: sccache clang-19
-  CXX: sccache clang++-19
-  SCCACHE_GHA_ENABLED: 'true'
+  # Remove sccache from compiler commands
+  CC: clang-19
+  CXX: clang++-19
+  # Disable sccache
+  SCCACHE_GHA_ENABLED: 'false'
   RUSTC_VERSION: '1.82'
 
 permissions:
@@ -31,10 +32,18 @@ jobs:
         with:
           persist-credentials: false
           path: node
+          # Disable git LFS cache
+          lfs: false
 
       - name: Install fio
-        run: sudo apt-get update && sudo apt-get install -y fio
-
+        run: |
+          # Clear APT cache first
+          sudo apt-get clean
+          sudo rm -rf /var/lib/apt/lists/*
+          # Fresh package list
+          sudo apt-get update
+          # Install without recommendations to reduce cached packages
+          sudo apt-get install -y --no-install-recommends fio
 
       - name: Install Clang ${{ env.CLANG_VERSION }}
         uses: ./node/.github/actions/install-clang
@@ -45,18 +54,41 @@ jobs:
         run: |
           rustup override set "$RUSTC_VERSION"
           rustup --version
+          # Clear Rust cache
+          rm -rf ~/.cargo/registry
+          rm -rf ~/.cargo/git
+          rm -rf target/
 
       - name: Set up Python ${{ env.PYTHON_VERSION }}
         uses: actions/setup-python@v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
           allow-prereleases: true
+          # Disable pip caching
+          cache: ''
 
-      - name: Set up sccache
-        uses: Mozilla-Actions/sccache-action@v0.0.9
-        with:
-          version: v0.12.0
+      # REMOVED: sccache-action step entirely
+      # - name: Set up sccache
+      #   uses: Mozilla-Actions/sccache-action@v0.0.9
 
-      - name: Build
-        run: make -C node build-ci -j4 V=1 CONFIG_FLAGS="--error-on-warn --v8-enable-temporal-support"
+      - name: Clean build directory
+        run: |
+          # Ensure completely clean build
+          rm -rf node/out
+          rm -rf node/.ninja_deps
+          rm -rf node/.ninja_log
+          make -C node clean || true
 
+      - name: Build (No Cache)
+        run: |
+          # Verify no sccache is active
+          echo "CC=$CC"
+          echo "CXX=$CXX"
+          which $CC
+          which $CXX
+          
+          # Clean build from scratch
+          make -C node build-ci -j4 V=1 CONFIG_FLAGS="--error-on-warn --v8-enable-temporal-support"
+        env:
+          # Ensure sccache is disabled
+          SCCACHE_DISABLE: '1'
