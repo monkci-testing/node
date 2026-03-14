@@ -1,4 +1,5 @@
 name: CI Benchmark (No Cache)
+
 on:
   workflow_dispatch:
 
@@ -23,10 +24,15 @@ jobs:
       fail-fast: false
       matrix:
         runner:
-          - monkci-ubuntu-24.04-4-3600iops-400
-          - monkci-ubuntu-24.04-4-3600iops-500
-          - monkci-ubuntu-24.04-4-3600iops-600
-          - ubuntu-latest
+          - monkci-ubuntu-24.04-4-3000iops
+          - monkci-ubuntu-24.04-4-3600iops
+          - monkci-ubuntu-24.04-4-4000-290iops
+          - monkci-ubuntu-24.04-4-3600-150iops
+          - monkci-ubuntu-24.04-4-3600-200iops
+          - monkci-ubuntu-24.04-4-3600-250iops
+          - monkci-ubuntu-24.04-4-3600-300iops
+          - monkci-ubuntu-24.04-4-3600-350iops
+
     steps:
       - uses: actions/checkout@v4
         with:
@@ -86,7 +92,7 @@ jobs:
           echo "CXX=$CXX"
           which $CC
           which $CXX
-          
+
           # Clean build from scratch
           make -C node build-ci -j4 V=1 CONFIG_FLAGS="--error-on-warn --v8-enable-temporal-support"
         env:
