@@ -1,4 +1,4 @@
-name: CI Benchmark (No Cache)
+name: Node CI Benchmark (No Cache)
 
 on:
   workflow_dispatch:
