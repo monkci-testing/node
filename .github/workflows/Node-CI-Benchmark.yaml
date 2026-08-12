@@ -25,7 +25,7 @@ jobs:
       matrix:
         runner:
           - ubuntu-latest
-          - monkci-ubuntu-24.04-32
+          - monkci-ubuntu-24.04-4
 
     steps:
       - uses: actions/checkout@v4
